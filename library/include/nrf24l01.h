@@ -39,6 +39,7 @@
 *******************************************************************************/
 #include <stdint.h>
 #include <stdbool.h>
+#include "nrf24l01_hw.h"
 #include "nrf24l01_defs.h"
 
 /******************************************************************************
@@ -109,7 +110,7 @@ extern "C"{
  * @param address - address of primary Pipe 0
  * @param operational_mode - Enables either PRX or PTX modes
  */
-void nrf_sb_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode );
+int nrf_sb_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode );
 
 /**
  * @brief nrf_esb_init
@@ -117,7 +118,7 @@ void nrf_sb_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode
  * @param address
  * @param operational_mode
  */
-void nrf_esb_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode );
+int nrf_esb_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode );
 
 /**
  * @brief nrf_pl_init
@@ -125,7 +126,7 @@ void nrf_esb_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mod
  * @param address
  * @param operational_mode
  */
-void nrf_esb_bidirection_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode );
+int nrf_esb_bidirection_init( nrf_addr_map_t *address, nrf_operation_mode_t operational_mode );
 
 /**
  * @brief nrf_send_data

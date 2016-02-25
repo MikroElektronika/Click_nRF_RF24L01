@@ -75,13 +75,10 @@ static void tft_initialize()
 
 static void tft_update()
 {
+    char tmp_txt[80];
     TFT_Set_Font( TFT_defaultFont, CL_WHITE, FO_HORIZONTAL );
     TFT_Write_Text( "ERROR", 138, 25 );
-    sprintf( tmp_txt, "%3.1f", last_angle );
-    TFT_Write_Text( tmp_txt, 10, 25 );
-    TFT_Set_Font( TFT_defaultFont, CL_BLACK, FO_HORIZONTAL );
-    sprintf( tmp_txt, "%3.1f", total );
-    TFT_Write_Text( tmp_txt, 10, 25 );
+
     
     update_time = false;
 }

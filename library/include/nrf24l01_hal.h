@@ -38,6 +38,12 @@
 #include <stdint.h>
 #include "nrf24l01_defs.h"
 
+#if defined( __GNUC__ )
+	#if defined( STM32F042x6 )
+		#include "stm32f0xx_hal.h"
+	#endif
+#endif
+
 /******************************************************************************
 * Preprocessor Constants
 *******************************************************************************/

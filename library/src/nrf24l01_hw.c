@@ -21,21 +21,116 @@
 *******************************************************************************/
 #include <stdint.h>
 #include <stdbool.h>
-
-#include "nrf_common.h"
 #include "nrf24l01_hw.h"
 #include "nrf24l01_hal.h"
 
 /******************************************************************************
 * Module Preprocessor Constants
 *******************************************************************************/
+/** @name - Instruction Set - */
+#define NRF_WRITE_REG 0x20  /**< Register write command */
+#define RD_RX_PLOAD_W 0x60  /**< Read RX payload command */
+#define RD_RX_PLOAD   0x61  /**< Read RX payload command */
+#define WR_TX_PLOAD   0xA0  /**< Write TX payload command */
+#define WR_ACK_PLOAD  0xA8  /**< Write ACK payload command */
+#define WR_NAC_TX_PLOAD 0xB0  /**< Write ACK payload command */
+#define FLUSH_TX      0xE1  /**< Flush TX register command */
+#define FLUSH_RX      0xE2  /**< Flush RX register command */
+#define REUSE_TX_PL   0xE3  /**< Reuse TX payload command */
+#define LOCK_UNLOCK   0x50  /**< Lock/unlcok exclusive features */
 
+#define NOP           0xFF  /**< No Operation command, used for reading status register */
+
+/** Register Memory Map - */
+#define CONFIG        0x00  /**< nRF24L01 config register */
+#define EN_AA         0x01  /**< nRF24L01 enable Auto-Acknowledge register */
+#define EN_RXADDR     0x02  /**< nRF24L01 enable RX addresses register */
+#define SETUP_AW      0x03  /**< nRF24L01 setup of address width register */
+#define SETUP_RETR    0x04  /**< nRF24L01 setup of automatic retransmission register */
+#define RF_CH         0x05  /**< nRF24L01 RF channel register */
+#define RF_SETUP      0x06  /**< nRF24L01 RF setup register */
+#define STATUS        0x07  /**< nRF24L01 status register */
+#define OBSERVE_TX    0x08  /**< nRF24L01 transmit observe register */
+#define CD            0x09  /**< nRF24L01 carrier detect register */
+#define RX_ADDR_P0    0x0A  /**< nRF24L01 receive address data pipe0 */
+#define RX_ADDR_P1    0x0B  /**< nRF24L01 receive address data pipe1 */
+#define RX_ADDR_P2    0x0C  /**< nRF24L01 receive address data pipe2 */
+#define RX_ADDR_P3    0x0D  /**< nRF24L01 receive address data pipe3 */
+#define RX_ADDR_P4    0x0E  /**< nRF24L01 receive address data pipe4 */
+#define RX_ADDR_P5    0x0F  /**< nRF24L01 receive address data pipe5 */
+#define TX_ADDR       0x10  /**< nRF24L01 transmit address */
+#define RX_PW_P0      0x11  /**< nRF24L01 \# of bytes in rx payload for pipe0 */
+#define RX_PW_P1      0x12  /**< nRF24L01 \# of bytes in rx payload for pipe1 */
+#define RX_PW_P2      0x13  /**< nRF24L01 \# of bytes in rx payload for pipe2 */
+#define RX_PW_P3      0x14  /**< nRF24L01 \# of bytes in rx payload for pipe3 */
+#define RX_PW_P4      0x15  /**< nRF24L01 \# of bytes in rx payload for pipe4 */
+#define RX_PW_P5      0x16  /**< nRF24L01 \# of bytes in rx payload for pipe5 */
+#define FIFO_STATUS   0x17  /**< nRF24L01 FIFO status register */
+#define DYNPD         0x1C  /**< nRF24L01 Dynamic payload setup */
+#define FEATURE       0x1D  /**< nRF24L01 Exclusive feature setup */
+
+#define MASK_RX_DR    6     /**< CONFIG register bit 6 */
+#define MASK_TX_DS    5     /**< CONFIG register bit 5 */
+#define MASK_MAX_RT   4     /**< CONFIG register bit 4 */
+#define EN_CRC        3     /**< CONFIG register bit 3 */
+#define CRCO          2     /**< CONFIG register bit 2 */
+#define PWR_UP        1     /**< CONFIG register bit 1 */
+#define PRIM_RX       0     /**< CONFIG register bit 0 */
+
+/** @name RF_SETUP register bit definitions */
+//@{
+#define PLL_LOCK      4     /**< RF_SETUP register bit 4 */
+#define RF_DR         3     /**< RF_SETUP register bit 3 */
+#define RF_PWR1       2     /**< RF_SETUP register bit 2 */
+#define RF_PWR0       1     /**< RF_SETUP register bit 1 */
+#define LNA_HCURR     0     /**< RF_SETUP register bit 0 */
+//@}
+
+/* STATUS 0x07 */
+/** @name STATUS register bit definitions */
+//@{
+#define RX_DR         6     /**< STATUS register bit 6 */
+#define TX_DS         5     /**< STATUS register bit 5 */
+#define MAX_RT        4     /**< STATUS register bit 4 */
+#define TX_FULL       0     /**< STATUS register bit 0 */
+//@}
+
+/* FIFO_STATUS 0x17 */
+/** @name FIFO_STATUS register bit definitions */
+//@{
+#define TX_REUSE      6     /**< FIFO_STATUS register bit 6 */
+#define TX_FIFO_FULL  5     /**< FIFO_STATUS register bit 5 */
+#define TX_EMPTY      4     /**< FIFO_STATUS register bit 4 */
+#define RX_FULL       1     /**< FIFO_STATUS register bit 1 */
+#define RX_EMPTY      0     /**< FIFO_STATUS register bit 0 */
+//@}
+
+#define NRF_BIT_0 0x01 /**< The value of bit 0 */
+#define NRF_BIT_1 0x02 /**< The value of bit 1 */
+#define NRF_BIT_2 0x04 /**< The value of bit 2 */
+#define NRF_BIT_3 0x08 /**< The value of bit 3 */
+#define NRF_BIT_4 0x10 /**< The value of bit 4 */
+#define NRF_BIT_5 0x20 /**< The value of bit 5 */
+#define NRF_BIT_6 0x40 /**< The value of bit 6 */
+#define NRF_BIT_7 0x80 /**< The value of bit 7 */
 
 /******************************************************************************
 * Module Preprocessor Macros
 *******************************************************************************/
-#define SET_BIT(pos) ((uint8_t) (1<<( (uint8_t) (pos) )))
-#define UINT8(t) ((uint8_t) (t))
+/** Swaps the upper byte with the lower byte in a 16 bit variable */
+#define NRF_SWAP(x) ((((x)&0xFF)<<8)|(((x)>>8)&0xFF))
+
+#define NRF_SET_BIT(pos) ((uint8_t) (1<<( (uint8_t) (pos) )))
+
+/** The upper 8 bits of a 16 bit value */
+#define NRF_MSB(a) ((a & 0xFF00) >> 8)
+/** The lower 8 bits (of a 16 bit value) */
+#define NRF_LSB(a) ((a & 0xFF))
+
+/** Leaves the minimum of the two arguments */
+#define NRF_MIN(a, b) ((a) < (b) ? (a) : (b))
+/** Leaves the maximum of the two arguments */
+#define NRF_MAX(a, b) ((a) < (b) ? (b) : (a))
 
 /******************************************************************************
 * Module Typedefs
@@ -124,7 +219,7 @@ static inline void nrf_lock_unlock( void );
  *
  * @return
  * @retval true - locked
- * @retval flase - unlocked
+ * @retval false - unlocked
  */
 static inline bool is_locked( void );
 
@@ -164,8 +259,8 @@ static uint8_t nrf_write_reg( uint8_t reg, uint8_t value )
 {
     uint8_t retval;
 
-    if( reg < WRITE_REG ) // i.e. this is a register access
-        retval = nrf_hal_write_reg( WRITE_REG + reg, value );
+    if( reg < NRF_WRITE_REG ) // i.e. this is a register access
+        retval = nrf_hal_write_reg( NRF_WRITE_REG + reg, value );
     else            // single byte cmd OR future command/register access
     {
         if( !( reg == FLUSH_TX ) && !( reg == FLUSH_RX ) && !( reg == REUSE_TX_PL ) &&
@@ -192,7 +287,8 @@ static uint8_t nrf_write_reg( uint8_t reg, uint8_t value )
 */
 static uint16_t nrf_read_multibyte_reg( uint8_t reg, uint8_t *pbuf )
 {
-    uint8_t length, address;
+    uint8_t length  = 0;
+	uint8_t address = 0;
 
     switch( reg )
     {
@@ -238,7 +334,7 @@ static void nrf_write_multibyte_reg( uint8_t reg, uint8_t *pbuf,
         case NRF_PIPE0:
         case NRF_PIPE1:
         case NRF_TX:
-            nrf_hal_write( WRITE_REG + RX_ADDR_P0 + reg, pbuf, nrf_get_address_width() );
+            nrf_hal_write( NRF_WRITE_REG + RX_ADDR_P0 + reg, pbuf, nrf_get_address_width() );
             break;
         case NRF_TX_PLOAD:
             nrf_hal_write( WR_TX_PLOAD, pbuf, length );
@@ -300,15 +396,15 @@ void nrf_set_irq_mode( nrf_irq_source_t int_source, bool irq_state )
     // TODO: Check this logic.  If true it appears to clear the bit
     if( irq_state )
         nrf_write_reg( CONFIG,
-                       nrf_hal_read_reg( CONFIG ) & ~SET_BIT( int_source ) );
+                       nrf_hal_read_reg( CONFIG ) & ~NRF_SET_BIT( int_source ) );
     else
         nrf_write_reg( CONFIG,
-                       nrf_hal_read_reg( CONFIG ) | SET_BIT( int_source ) );
+                       nrf_hal_read_reg( CONFIG ) | NRF_SET_BIT( int_source ) );
 }
 
 bool nrf_get_irq_mode( uint8_t int_type )
 {
-    if( nrf_hal_read_reg( CONFIG ) & SET_BIT( int_type ) )
+    if( nrf_hal_read_reg( CONFIG ) & NRF_SET_BIT( int_type ) )
         return false;
     else
         return true;
@@ -317,17 +413,17 @@ bool nrf_get_irq_mode( uint8_t int_type )
 uint8_t nrf_get_clear_irq_flags( void )
 {
     return nrf_write_reg( STATUS,
-                          ( BIT_6 | BIT_5 | BIT_4 ) ) & ( BIT_6 | BIT_5 | BIT_4 );
+                          ( NRF_BIT_6 | NRF_BIT_5 | NRF_BIT_4 ) ) & ( NRF_BIT_6 | NRF_BIT_5 | NRF_BIT_4 );
 }
 
 void nrf_clear_irq_flag( nrf_irq_source_t int_source )
 {
-    nrf_write_reg( STATUS, SET_BIT( int_source ) );
+    nrf_write_reg( STATUS, NRF_SET_BIT( int_source ) );
 }
 
 uint8_t nrf_get_irq_flags( void )
 {
-    return nrf_nop() & ( BIT_6 | BIT_5 | BIT_4 );
+    return nrf_nop() & ( NRF_BIT_6 | NRF_BIT_5 | NRF_BIT_4 );
 }
 
 void nrf_enable_ack_pl( void )
@@ -403,14 +499,13 @@ void nrf_disable_dynamic_ack( void )
 // CRC Functions
 void nrf_set_crc_mode( nrf_crc_mode_t crc_mode )
 {
-    nrf_write_reg( CONFIG,
-                   ( nrf_hal_read_reg( CONFIG ) & ~( BIT_3 | BIT_2 ) ) | ( UINT8(
-                               crc_mode ) << 2 ) );
+    nrf_write_reg( CONFIG, ( nrf_hal_read_reg( CONFIG ) &
+    			~( ( NRF_BIT_3 | NRF_BIT_2 ) | ( uint8_t )( crc_mode << 2 ) ) ) );
 }
 
 uint8_t nrf_get_crc_mode( void )
 {
-    return ( nrf_hal_read_reg( CONFIG ) & ( BIT_3 | BIT_2 ) ) >> CRCO;
+    return ( nrf_hal_read_reg( CONFIG ) & ( NRF_BIT_3 | NRF_BIT_2 ) ) >> CRCO;
 }
 
 
@@ -426,19 +521,19 @@ void nrf_open_pipe( nrf_address_t pipe_num, bool auto_ack )
         case NRF_PIPE4:
         case NRF_PIPE5:
             nrf_write_reg( EN_RXADDR,
-                           nrf_hal_read_reg( EN_RXADDR ) | SET_BIT( pipe_num ) );
+                           nrf_hal_read_reg( EN_RXADDR ) | NRF_SET_BIT( pipe_num ) );
 
             if( auto_ack )
-                nrf_write_reg( EN_AA, nrf_hal_read_reg( EN_AA ) | SET_BIT( pipe_num ) );
+                nrf_write_reg( EN_AA, nrf_hal_read_reg( EN_AA ) | NRF_SET_BIT( pipe_num ) );
             else
-                nrf_write_reg( EN_AA, nrf_hal_read_reg( EN_AA ) & ~SET_BIT( pipe_num ) );
+                nrf_write_reg( EN_AA, nrf_hal_read_reg( EN_AA ) & ~NRF_SET_BIT( pipe_num ) );
             break;
 
         case NRF_ALL:
-            nrf_write_reg( EN_RXADDR, ~( BIT_7 | BIT_6 ) );
+            nrf_write_reg( EN_RXADDR, ~( NRF_BIT_7 | NRF_BIT_6 ) );
 
             if( auto_ack )
-                nrf_write_reg( EN_AA, ~( BIT_7 | BIT_6 ) );
+                nrf_write_reg( EN_AA, ~( NRF_BIT_7 | NRF_BIT_6 ) );
             else
                 nrf_write_reg( EN_AA, 0 );
             break;
@@ -459,8 +554,8 @@ void nrf_close_pipe( nrf_address_t pipe_num )
         case NRF_PIPE4:
         case NRF_PIPE5:
             nrf_write_reg( EN_RXADDR,
-                           nrf_hal_read_reg( EN_RXADDR ) & ~SET_BIT( pipe_num ) );
-            nrf_write_reg( EN_AA, nrf_hal_read_reg( EN_AA ) & ~SET_BIT( pipe_num ) );
+                           nrf_hal_read_reg( EN_RXADDR ) & ~NRF_SET_BIT( pipe_num ) );
+            nrf_write_reg( EN_AA, nrf_hal_read_reg( EN_AA ) & ~NRF_SET_BIT( pipe_num ) );
             break;
 
         case NRF_ALL:
@@ -525,7 +620,7 @@ uint8_t nrf_get_address( nrf_address_t address, uint8_t *addr )
 
 void nrf_set_address_width( nrf_address_width_t address_width )
 {
-    nrf_write_reg( SETUP_AW, ( UINT8( address_width ) - 2 ) );
+    nrf_write_reg( SETUP_AW, ( uint8_t )( address_width - 2 ) );
 }
 
 uint8_t nrf_get_address_width( void )
@@ -539,7 +634,7 @@ uint8_t nrf_get_address_width( void )
 // Auto re-transmit and number of transmissions
 void nrf_set_auto_retr( uint8_t retr, uint16_t delay )
 {
-    retr = MIN( retr, 15 );
+    retr = NRF_MIN( retr, 15 );
     nrf_write_reg( SETUP_RETR, ( ( ( delay / 250 ) - 1 ) << 4 ) | retr );
 }
 
@@ -550,13 +645,14 @@ uint8_t nrf_get_auto_retr_status( void )
 
 uint8_t nrf_get_transmit_attempts( void )
 {
-    return nrf_hal_read_reg( OBSERVE_TX ) & ( BIT_3 | BIT_2 | BIT_1 | BIT_0 );
+    return nrf_hal_read_reg( OBSERVE_TX ) &
+    		( NRF_BIT_3 | NRF_BIT_2 | NRF_BIT_1 | NRF_BIT_0 );
 }
 
 uint8_t nrf_get_packet_lost_ctr( void )
 {
-    return ( nrf_hal_read_reg( OBSERVE_TX ) & ( BIT_7 | BIT_6 | BIT_5 | BIT_4 ) )
-           >> 4;
+    return ( nrf_hal_read_reg( OBSERVE_TX ) &
+    		( NRF_BIT_7 | NRF_BIT_6 | NRF_BIT_5 | NRF_BIT_4 ) ) >> 4;
 }
 
 void nrf_set_rx_pload_width( uint8_t pipe_num, uint8_t pload_width )
@@ -634,7 +730,7 @@ void nrf_set_output_power( nrf_output_power_t power )
 {
     nrf_write_reg( RF_SETUP,
                    ( nrf_hal_read_reg( RF_SETUP ) & ~( ( 1 << RF_PWR1 ) |
-                           ( 1 << RF_PWR0 ) ) ) | ( UINT8( power ) << 1 ) );
+                           ( 1 << RF_PWR0 ) ) ) | ( ( uint8_t )( power ) << 1 ) );
 }
 
 uint8_t nrf_get_output_power()
@@ -728,19 +824,19 @@ bool nrf_get_carrier_detect( void )
  ************************************/
 nrf_address_t nrf_get_rx_data_source( void )
 {
-    return ( ( nrf_nop() & ( BIT_3 | BIT_2 | BIT_1 ) ) >> 1 );
+    return ( ( nrf_nop() & ( NRF_BIT_3 | NRF_BIT_2 | NRF_BIT_1 ) ) >> 1 );
 }
 
 // Transmit and Recieve Functions
 // Fixed: returns length==0 and pipe==7 means FIFO empty
 uint16_t nrf_read_rx_pload( uint8_t *rx_pload )
 {
-    return nrf_read_multibyte_reg( UINT8( NRF_RX_PLOAD ), rx_pload );
+    return nrf_read_multibyte_reg( ( uint8_t )( NRF_RX_PLOAD ), rx_pload );
 }
 
 void nrf_write_tx_pload( uint8_t *tx_pload, uint8_t length )
 {
-    nrf_write_multibyte_reg( UINT8( NRF_TX_PLOAD ), tx_pload, length );
+    nrf_write_multibyte_reg( ( uint8_t )( NRF_TX_PLOAD ), tx_pload, length );
 }
 
 // Reuse Functions

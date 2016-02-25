@@ -13,15 +13,22 @@
 *******************************************************************************/
 /**
  * @file nrf_hal.c
- * @brief Implimentation adapted from Nordic
+ * @brief Implementation adapted from Nordic
  */
 /******************************************************************************
 * Includes
 *******************************************************************************/
 #include "nrf24l01_hal.h"
 #include "nrf24l01_defs.h"
-#include "nrf_common.h"
 #include <stddef.h>
+
+#if defined( __GNUC__ )
+#if defined( STM32F0 )
+#include"stm32f0xx.h"
+#elif defined( STM32F1 )
+#include "stm32f1xx.h"
+#endif
+#endif
 
 /******************************************************************************
 * Module Preprocessor Constants
@@ -81,8 +88,14 @@ static unsigned char( *spi_read_p )( unsigned char dummy );
 static void( *spi_write_p )( unsigned char dataOut );
 #elif defined ( __GNUC__ )
 
-#define spi_write_p 1
-#define spi_read_p  1
+static HAL_StatusTypeDef ( *spi_write_p )( SPI_HandleTypeDef *hspi,
+										   uint8_t *pData,
+										   uint16_t Size,
+										   uint32_t Timeout );
+static HAL_StatusTypeDef ( *spi_read_p )( SPI_HandleTypeDef *hspi,
+										  uint8_t *pData,
+										  uint16_t Size,
+										  uint32_t Timeout );
 
 #endif
 
@@ -95,6 +108,12 @@ static void( *spi_write_p )( unsigned char dataOut );
     defined( __MIKROC_PRO_FOR_FT90x__ )
 extern sfr sbit NRF_CS_PIN;
 extern sfr sbit NRF_CE_PIN;
+#elif defined( __GNUC__ )
+extern uint16_t NRF_CS_PIN;
+extern GPIO_TypeDef *NRF_CS_PORT;
+extern uint16_t NRF_CE_PIN;
+extern GPIO_TypeDef *NRF_CE_PORT;
+extern SPI_HandleTypeDef *NRF_SPI_PORT;
 #endif
 
 
@@ -113,7 +132,7 @@ static void CE_PULSE( void );
 static void CSN_LOW()
 {
 #if defined( __GNUC__ )
-
+	HAL_GPIO_WritePin( NRF_CS_PORT, NRF_CS_PIN, GPIO_PIN_RESET );
 #else
     NRF_CS_PIN = 0;
 #endif
@@ -123,7 +142,7 @@ static void CSN_LOW()
 static void CSN_HIGH()
 {
 #if defined( __GNUC__ )
-
+	HAL_GPIO_WritePin( NRF_CS_PORT, NRF_CS_PIN, GPIO_PIN_SET );
 #else
     NRF_CS_PIN = 1;
 #endif
@@ -132,7 +151,7 @@ static void CSN_HIGH()
 static void CE_LOW()
 {
 #if defined( __GNUC__ )
-
+	HAL_GPIO_WritePin( NRF_CE_PORT, NRF_CE_PIN, GPIO_PIN_RESET );
 #else
     NRF_CE_PIN = 0;
 #endif
@@ -141,7 +160,7 @@ static void CE_LOW()
 static void CE_HIGH()
 {
     #if defined( __GNUC__ )
-
+	HAL_GPIO_WritePin( NRF_CE_PORT, NRF_CE_PIN, GPIO_PIN_SET );
     #else
     NRF_CE_PIN = 1;
     #endif
@@ -154,7 +173,7 @@ static void CE_PULSE()
 {
     CE_HIGH();
     #if defined( __GNUC__ )
-
+    HAL_Delay( 10 );
     #else
     Delay_10us();
     #endif
@@ -189,6 +208,9 @@ int nrf_hal_init( nrf_operation_mode_t mode )
     #elif defined( __MIKROC_PRO_FOR_FT90x__ )
                 spi_read_p = SPIM_Rd_Ptr;
                 spi_write_p = SPIM_Wr_Ptr;
+    #elif defined( __GNUC__ )
+                spi_read_p = HAL_SPI_Receive;
+                spi_write_p = HAL_SPI_Transmit;
     #endif
 
     return ( spi_read_p == NULL || spi_write_p == NULL ) ? -1 : 0;
@@ -199,7 +221,7 @@ void nrf_hal_listen()
 {
     CE_HIGH();
 #if defined( __GNUC__ )
-
+    HAL_Delay( 1 );
 #else
     Delay_50us();
     Delay_50us();
@@ -219,7 +241,8 @@ uint8_t nrf_hal_write_reg( uint8_t address, uint8_t value )
 
     CSN_LOW();
 #if defined( __GNUC__ )
-
+    spi_write_p( NRF_SPI_PORT, &address, 1, 0 );
+    spi_write_p( NRF_SPI_PORT, &value, 1, 0 );
 #else
     status = spi_read_p( address );
     spi_write_p( value );
@@ -236,7 +259,8 @@ uint8_t nrf_hal_read_reg( uint8_t address )
 
     CSN_LOW();
 #if defined( __GNUC__ )
-
+    spi_write_p( NRF_SPI_PORT, &address, 1, 0 );
+    spi_read_p( NRF_SPI_PORT, &read_value, 1, 0 );
 #else
     spi_write_p( address );
     read_value = spi_read_p( 0x00 );
@@ -250,7 +274,8 @@ int nrf_hal_write( uint8_t address, uint8_t *data_in, uint8_t count )
 {
     CSN_LOW();
 #if defined( __GNUC__ )
-
+    spi_write_p( NRF_SPI_PORT, &address, 1, 0 );
+    spi_write_p( NRF_SPI_PORT, data_in, count, 0 );
 #else
     spi_write_p( address );
     while( count-- )
@@ -258,7 +283,7 @@ int nrf_hal_write( uint8_t address, uint8_t *data_in, uint8_t count )
 #endif
     CSN_HIGH();
 
-    if( address == WR_TX_PLOAD )
+    if( address == 0xA0 )
         CE_PULSE();
 
     return 0;
@@ -271,7 +296,8 @@ int nrf_hal_read( uint8_t address, uint8_t *data_out, uint8_t count )
 
     CSN_LOW();
 #if defined( __GNUC__ )
-
+    spi_write_p( NRF_SPI_PORT, &address, 1, 0 );
+    spi_read_p( NRF_SPI_PORT, data_out, count, 0 );
 #else
     spi_write_p( address );
 
@@ -286,7 +312,7 @@ int nrf_hal_read( uint8_t address, uint8_t *data_out, uint8_t count )
 void nrf_hal_delay( uint16_t ms )
 {
 #if defined( __GNUC__ )
-
+    HAL_Delay( ms );
 #else
     while( ms-- )
         Delay_1ms();

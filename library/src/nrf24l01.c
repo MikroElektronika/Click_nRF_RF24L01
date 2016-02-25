@@ -19,8 +19,6 @@
 * Includes
 *******************************************************************************/
 #include "nrf24l01.h"
-#include "nrf24l01_hw.h"
-#include "nrf_common.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
@@ -28,6 +26,8 @@
 /******************************************************************************
 * Module Preprocessor Constants
 *******************************************************************************/
+#define NRF_ERROR  -1
+#define NRF_SUCCESS 0
 
 /******************************************************************************
 * Module Preprocessor Macros
@@ -52,10 +52,13 @@ static uint32_t volatile timeout;
 /******************************************************************************
 * Function Definitions
 *******************************************************************************/
-void nrf_sb_init( nrf_addr_map_t *address,
+int nrf_sb_init( nrf_addr_map_t *address,
                   nrf_operation_mode_t operational_mode )
 {
-    nrf_hw_init( operational_mode );
+    if( address == NULL )
+    	return NRF_ERROR;
+    else if( nrf_hw_init( operational_mode ) )
+    	return NRF_ERROR;
     /* First close all radio pipes. Pipe 0 and 1 open by default */
     nrf_close_pipe( NRF_ALL );
     /* Operates in 16bits CRC mode */
@@ -122,28 +125,34 @@ void nrf_sb_init( nrf_addr_map_t *address,
         }
     }
 
-    /* Operating on static channel, Frequenzy = 2400 + RF_CHANNEL */
+    /* Operating on static channel, Frequency = 2400 + RF_CHANNEL */
     nrf_set_rf_channel( NRF_CHANNEL );
 
     nrf_set_power_mode( NRF_PWR_UP );
 
-    nrf_delay( NRF_POWER_UP_DELAY );                // Wait for the radio to
+    nrf_delay( NRF_POWER_UP_DELAY );   // Wait for the radio to
     
     if( operational_mode == NRF_PRX ) 
         nrf_start_active_rx();
     else
         nrf_enter_standby_mode();
+
+    return NRF_SUCCESS;
 }
 
 
-void nrf_esb_init( nrf_addr_map_t *address,
+int nrf_esb_init( nrf_addr_map_t *address,
                    nrf_operation_mode_t operational_mode )
 {
-    if( address )
+    if( address == NULL )
+    	return NRF_ERROR;
+
+	if( address )
     {
         /* Open pipe(s), with autoack */
         //uint8_t *ptr = ( uint8_t * )address;
-        nrf_sb_init( address, operational_mode );
+        if( nrf_sb_init( address, operational_mode ) )
+        	return NRF_ERROR;
 
         /* Open pipe0, with/autoack */
         nrf_open_pipe( NRF_PIPE0, true );
@@ -167,23 +176,30 @@ void nrf_esb_init( nrf_addr_map_t *address,
     }
 
     nrf_set_auto_retr( NRF_RETRANSMITS, NRF_RETRANS_DELAY );
+
+    return NRF_SUCCESS;
 }
 
 
-void nrf_esb_bidirection_init( nrf_addr_map_t *address,
+int nrf_esb_bidirection_init( nrf_addr_map_t *address,
                                nrf_operation_mode_t operational_mode )
 {
-    nrf_esb_init( address, operational_mode );
+	if( address == NULL )
+	    	return NRF_ERROR;
+	else if( nrf_esb_init( address, operational_mode ) )
+		return NRF_ERROR;
 
     nrf_enable_ack_pl();        // Enable ack payload
     nrf_enable_dynamic_pl();    // Enables dynamic payload
     nrf_setup_dyn_pl( 0x3f );   // Sets up dynamic payload on all data pipes.
+
+    return NRF_SUCCESS;
 }
 
 
 uint8_t nrf_send_data( uint8_t *address, uint8_t *data_out, uint8_t count )
 {
-    uint32_t time_up;
+    uint32_t time_out;
     
     count = MIN( count, NRF_PAYLOAD_LENGTH );
     success_tx = false;
@@ -193,14 +209,18 @@ uint8_t nrf_send_data( uint8_t *address, uint8_t *data_out, uint8_t count )
     else
         nrf_write_tx_pload( data_out, count );
     
-    time_up = timeout + 13;
+    time_out = timeout + 13;
     
-    while( !success_tx )
+    if( ack_enabled )
     {
-       if( timeout > time_up )
-       {
-           break;
-       }
+		while( !success_tx )
+		{
+		   if( timeout > time_out )
+		   {
+			   count = 0;
+			   break;
+		   }
+		}
     }
     return count;
 }

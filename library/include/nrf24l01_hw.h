@@ -45,8 +45,6 @@
 #include <stdbool.h>
 
 #include "nrf24l01_defs.h"
-#include "nrf24l01_hal.h"
-
 
 /******************************************************************************
 * Preprocessor Constants
@@ -302,7 +300,7 @@ uint8_t nrf_get_address_width( void );
  * parameters.
  *
  * @param retr Number of retransmit, 0 equ retransmit OFF
- * @param delay Retransmit delay in µs
+ * @param delay Retransmit delay in ï¿½s
 */
 void nrf_set_auto_retr( uint8_t retr, uint16_t delay );
 
